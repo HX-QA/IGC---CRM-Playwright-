@@ -1,0 +1,20 @@
+{
+  "name": "igc-automation-tests",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test:regression": "playwright test --project=vp-solution",
+    "test:regression:headed": "playwright test --project=vp-solution --headed",
+    "test:regression:report": "playwright show-report",
+    "cleanup:dry-run": "playwright test --project=cleanup",
+    "cleanup:confirm": "CONFIRM_CLEANUP=yes playwright test --project=cleanup"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "devDependencies": {
+    "@playwright/test": "^1.61.1",
+    "@types/node": "^26.1.0"
+  }
+}

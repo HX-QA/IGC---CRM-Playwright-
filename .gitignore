@@ -1,0 +1,24 @@
+
+# Env
+.env
+.env.*
+!.env.*.example
+
+# Playwright
+node_modules/
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/playwright/.auth/
+
+# Saved login session (storageState) written by auth.setup.ts / saveSession()
+# — contains real cookies for a live Directus login, never commit this.
+/.auth/
+
+# Claude Code's local permission-allowlist state for this machine/session —
+# not project config, don't share it.
+/.claude/
+
+# Test run reports
+/reports/
