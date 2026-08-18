@@ -103,6 +103,56 @@ HTML report.
 > แต่ละ spec จะเขียนรายงานผ่าน/ไม่ผ่านแบบอ่านง่ายไว้ที่
 > `reports/<slug>-report.{md,json,txt}` เพิ่มเติมจาก HTML report ปกติของ Playwright
 
+### Dashboard
+
+`reports/dashboard.html` is one fixed file that a custom reporter
+([tests/support/dashboard-reporter.ts](tests/support/dashboard-reporter.ts))
+regenerates at the end of every `npx playwright test ...` run, aggregating
+every stage's checkpoint report (whichever ones exist so far) into one page
+— open it once and just refresh after each run to see every step, pass or
+fail, across the whole chain. A stage that hasn't run yet shows as "NOT RUN
+YET" instead of being left out.
+
+> `reports/dashboard.html` คือไฟล์เดียวที่ regenerate ทุกครั้งที่รัน
+> `npx playwright test` (ไม่ว่าจะรันทั้ง chain หรือแค่ stage เดียว) รวมผลผ่าน/
+> ไม่ผ่านของทุก checkpoint จากทุก stage ไว้ในหน้าเดียว — เปิดทิ้งไว้แล้ว
+> refresh ดูใหม่ได้ทุกครั้งหลังรัน stage ที่ยังไม่เคยรันจะโชว์ "NOT RUN YET"
+
+⚠️ **`--reporter=list` (or any other `--reporter=` CLI flag) replaces the
+reporters configured in `playwright.config.ts` entirely** — including this
+one. Omit `--reporter=` (or pass `--reporter=list,./tests/support/dashboard-reporter.ts`)
+if you want the dashboard to update.
+
+> ⚠️ ถ้าใส่ `--reporter=list` (หรือ `--reporter=` อะไรก็ตาม) ตอนรัน จะทับ
+> reporter ที่ตั้งไว้ใน `playwright.config.ts` ทั้งหมด **รวมถึง dashboard
+> ตัวนี้ด้วย** — ถ้าอยากให้ dashboard อัปเดต อย่าใส่ `--reporter=` เอง
+> (หรือใส่ `--reporter=list,./tests/support/dashboard-reporter.ts` แทน)
+
+#### Run History
+
+Every run also appends one compact line to `reports/history.jsonl`
+(slug, timestamp, pass/fail/skip counts, and — if it failed — the first
+failed step's name and a truncated error) via `appendHistory()` in
+[tests/support/directus.ts](tests/support/directus.ts). Once a stage has
+run more than once, its card on the dashboard gets a collapsed "▸ Run
+History (N runs)" disclosure listing every past run for that stage,
+newest first, so you can answer "which day did this fail, and at which
+step?" without digging through old HTML reports. The log is a single
+file, capped at the last 300 runs (oldest lines are trimmed off), so it
+stays useful across months of runs without turning into one file per
+run.
+
+> ทุกครั้งที่รันจะเขียนเพิ่มไว้ที่ `reports/history.jsonl` หนึ่งบรรทัดต่อการ
+> รัน (slug, เวลา, จำนวนผ่าน/ไม่ผ่าน/skip และถ้า fail จะเก็บชื่อ step แรกที่
+> fail กับ error แบบตัดสั้นไว้ด้วย) ผ่านฟังก์ชัน `appendHistory()` ใน
+> [tests/support/directus.ts](tests/support/directus.ts) — พอ stage ไหนเคย
+> รันมากกว่า 1 ครั้ง การ์ดของ stage นั้นบน dashboard จะมีช่อง "▸ Run History
+> (N runs)" ที่กดขยายดูได้ แสดงประวัติการรันทุกครั้งของ stage นั้น
+> (ล่าสุดอยู่บนสุด) ทำให้ตอบได้ว่า "วันไหน fail ตอนไหน" โดยไม่ต้องไปไล่เปิด
+> HTML report เก่าๆ ทีละไฟล์ — ไฟล์นี้มีไฟล์เดียว และจำกัดไว้ที่ 300 รันล่าสุด
+> (รันเก่ากว่านั้นจะถูกตัดออกอัตโนมัติ) เพื่อไม่ให้กินพื้นที่เพิ่มขึ้นเรื่อยๆ
+> แม้จะรันไปหลายเดือนก็ตาม
+
 ### Cleanup utility
 
 Dry-run by default — lists mock Requirements without deleting anything:
@@ -129,8 +179,40 @@ tests/
   cleanup-mock-requirements.spec.ts
   support/
     directus.ts                    # shared helpers: login, field lookups, save/report plumbing
+    locators.ts                    # named UI element identifiers — see "Locators config" below
     flow-state.ts                  # cross-spec reqNo/odNo/plNo/circuitId handoff
+    dashboard-reporter.ts          # regenerates reports/dashboard.html every run
 ```
+
+### Locators config
+
+Every raw string that used to go straight into a `page.getByRole(...)` /
+`getByText(...)` / `page.locator(...)` call (e.g. `{ name: 'check' }` for a
+Save button, `'account_circle'` for the account menu, `'order_approve OD'`
+for a nav link) now has a descriptive name, defined once in
+[tests/support/locators.ts](tests/support/locators.ts) and grouped by kind
+(`BUTTON_NAME`, `LINK_NAME`, `CHECKBOX_NAME`, `TEXT`, `SELECTOR`, ...). Every
+helper in `directus.ts` and every spec file imports from there instead of
+writing the raw literal inline — so a call site reads
+`getByRole('button', { name: BUTTON_NAME.SAVE, exact: true })` instead of
+`getByRole('button', { name: 'check', exact: true })`. If a selector ever
+breaks, re-record it with `npx playwright test --debug` or `npx playwright
+codegen` and update the value in `locators.ts` — every caller picks up the
+fix automatically.
+
+> เดิมโค้ดจะเขียน string ดิบๆ ตรงเข้าไปใน `page.getByRole(...)` /
+> `getByText(...)` / `page.locator(...)` เลย (เช่น `{ name: 'check' }`
+> สำหรับปุ่ม Save, `'account_circle'` สำหรับเมนูบัญชี, `'order_approve OD'`
+> สำหรับลิงก์เมนู) ซึ่งอ่านแล้วงงถ้าไม่รู้จัก UI ตัวนี้มาก่อน ตอนนี้ทุก
+> string แบบนี้ถูกตั้งชื่อไว้ที่เดียวใน
+> [tests/support/locators.ts](tests/support/locators.ts) แบ่งเป็นกลุ่มตาม
+> ประเภท (`BUTTON_NAME`, `LINK_NAME`, `CHECKBOX_NAME`, `TEXT`, `SELECTOR`,
+> ...) แล้วทุก helper ใน `directus.ts` และทุกไฟล์ spec import มาใช้แทนการ
+> เขียน string ดิบตรงๆ — โค้ดจึงอ่านว่า `getByRole('button', { name:
+> BUTTON_NAME.SAVE, exact: true })` แทนที่จะเป็น `getByRole('button', {
+> name: 'check', exact: true })` ถ้า selector ไหนพังในอนาคต ให้ re-record
+> ด้วย `npx playwright test --debug` หรือ `npx playwright codegen` แล้วแก้
+> ค่าใน `locators.ts` ที่เดียว ทุกจุดที่เรียกใช้จะได้ค่าที่แก้แล้วทันที
 
 CI runs the full suite on push/PR to `main`/`master` via
 [.github/workflows/playwright.yml](.github/workflows/playwright.yml).

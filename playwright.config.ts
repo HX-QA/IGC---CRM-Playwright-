@@ -40,7 +40,11 @@ export default defineConfig({
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
   // open: 'always' launches the HTML report in a browser as soon as the run
   // finishes (default is 'on-failure' only). Skipped on CI (no browser there).
-  reporter: [['html', { open: process.env.CI ? 'never' : 'always' }]],
+  // The second entry regenerates reports/dashboard.html — one fixed file,
+  // overwritten at the end of every run (whole chain or a single
+  // --project), aggregating every stage's own checkpoint report. See
+  // tests/support/dashboard-reporter.ts.
+  reporter: [['html', { open: process.env.CI ? 'never' : 'always' }], ['./tests/support/dashboard-reporter.ts']],
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     /* Base URL to use in actions like `await page.goto('')`. */

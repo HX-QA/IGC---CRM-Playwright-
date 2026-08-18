@@ -49,6 +49,7 @@ import {
   CheckpointResult,
 } from './support/directus';
 import { readFlowState, writeFlowState } from './support/flow-state';
+import { TEXT } from './support/locators';
 
 // "Select Item" relational picker values (Customer Name, Salesperson, Requestor
 // fields) — these must match real records in each environment (dev/production
@@ -192,7 +193,7 @@ test.describe('Requirements > Requirement All Forms > Opportunity Decision (OD) 
         // Requirement All Forms tab. "No items" not being visible would
         // otherwise pass vacuously if the whole section (and page) is wrong.
         await expect(odSection).toBeVisible({ timeout: 10_000 });
-        await expect(odSection.getByText('No items')).not.toBeVisible();
+        await expect(odSection.getByText(TEXT.NO_ITEMS)).not.toBeVisible();
         // Not anchored with ^ — the listitem's aggregated text often has a
         // leading icon glyph before the OD number, which an anchored regex
         // would never match even though the number itself is right there.

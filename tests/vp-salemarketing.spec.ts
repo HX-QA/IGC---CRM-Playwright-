@@ -20,6 +20,13 @@
 import { test, expect } from '@playwright/test';
 import { checkpoint, expectNoValidationError, inputByLabel, installKeepEditingHandler, login, openApprovalInbox, searchApprovalInbox, signOut, toggleCategoryCheckbox, writeReport, CheckpointResult } from './support/directus';
 import { requireFlowState } from './support/flow-state';
+import {
+  BUTTON_NAME,
+  CHECKBOX_NAME,
+  SECTION_BUTTON_NAME,
+  TEXT,
+  approvalInboxLinkName,
+} from './support/locators';
 
 test.describe('VP Sale Marketing > Approve OD + Approve P&L', () => {
   test.beforeEach(() => {
@@ -63,14 +70,14 @@ test.describe('VP Sale Marketing > Approve OD + Approve P&L', () => {
       '3.1 Approve OD — Marketing Department + PM Department',
       'Both departments\' decision steps are submitted, including the "ปรับปรุงราคา / Update Quotation" option.',
       async () => {
-        await page.getByRole('button', { name: 'Approval' }).click();
+        await page.getByRole('button', { name: SECTION_BUTTON_NAME.APPROVAL }).click();
         // These sections are collapsed accordions (an "expand_more" icon
         // sibling, not a child, of the label text) — clicking the bare text
         // node doesn't expand them here (unlike the OD-as-nested-dialog
         // view salemarketing.spec.ts clicks through, a different
         // component/layout for the same content). Click the clickable
         // wrapper two levels up instead.
-        await page.getByText('Marketing Department', { exact: true }).locator('xpath=..').click();
+        await page.getByText(TEXT.MARKETING_DEPARTMENT, { exact: true }).locator('xpath=..').click();
         // There is no "Approve" control anywhere on this page (checked
         // every button's accessible name live) — Marketing Department is
         // pure data entry (Customer Type / Payment Terms / document
@@ -89,7 +96,7 @@ test.describe('VP Sale Marketing > Approve OD + Approve P&L', () => {
         // approval-inbox view picking up the resulting permission change.
         // Reload and re-expand a few times rather than failing on the
         // first stale read.
-        const productCheckbox = page.getByRole('checkbox', { name: 'check_box_outline_blank Product' });
+        const productCheckbox = page.getByRole('checkbox', { name: CHECKBOX_NAME.MARKETING_PRODUCT_REQUIRED });
         let productEnabled = false;
         for (let attempt = 1; attempt <= 3 && !productEnabled; attempt++) {
           productEnabled = await productCheckbox
@@ -97,22 +104,22 @@ test.describe('VP Sale Marketing > Approve OD + Approve P&L', () => {
             .catch(() => false);
           if (!productEnabled) {
             await page.reload();
-            await page.getByRole('button', { name: 'Approval' }).click();
-            await page.getByText('Marketing Department', { exact: true }).locator('xpath=..').click();
+            await page.getByRole('button', { name: SECTION_BUTTON_NAME.APPROVAL }).click();
+            await page.getByText(TEXT.MARKETING_DEPARTMENT, { exact: true }).locator('xpath=..').click();
           }
         }
         await expect(productCheckbox).toBeEnabled({ timeout: 5000 });
         await productCheckbox.click();
-        await page.getByText('PM Department', { exact: true }).locator('xpath=..').click();
+        await page.getByText(TEXT.PM_DEPARTMENT, { exact: true }).locator('xpath=..').click();
         // PM Department has two yes/no questions ("Accepted"/"Not accepted"
         // — not "Approve") followed by a 3-way request-type choice. These
         // three positional clicks answer both questions "Accepted" and pick
         // the "ปรับปรุงราคา / Update Quotation" request type by position.
         // There's no further "Approve" button after this — confirmed live,
         // checked every button's accessible name on the page.
-        await page.getByRole('button', { name: 'radio_button_unchecked' }).nth(4).click();
-        await page.getByRole('button', { name: 'radio_button_unchecked' }).nth(4).click();
-        await page.getByRole('button', { name: 'radio_button_unchecked' }).nth(5).click();
+        await page.getByRole('button', { name: BUTTON_NAME.RADIO_UNCHECKED }).nth(4).click();
+        await page.getByRole('button', { name: BUTTON_NAME.RADIO_UNCHECKED }).nth(4).click();
+        await page.getByRole('button', { name: BUTTON_NAME.RADIO_UNCHECKED }).nth(5).click();
         // A trailing labeled click on this same option used to run here —
         // once nth(5) selects it, its accessible name flips to
         // "radio_button_checked ...", so re-querying for the "unchecked"
@@ -142,7 +149,7 @@ test.describe('VP Sale Marketing > Approve OD + Approve P&L', () => {
         // can re-render and shrink the set, leaving a later nth() waiting
         // forever for an index that no longer exists. Re-query fresh each
         // time to avoid stale indices.
-        const indeterminateCheckbox = page.getByRole('checkbox', { name: 'indeterminate_check_box' });
+        const indeterminateCheckbox = page.getByRole('checkbox', { name: CHECKBOX_NAME.INDETERMINATE });
         while ((await indeterminateCheckbox.count()) > 0) {
           await indeterminateCheckbox.first().click();
         }
@@ -151,8 +158,8 @@ test.describe('VP Sale Marketing > Approve OD + Approve P&L', () => {
         // checked both of the same checkboxes this was trying to reach
         // (their name flips from "indeterminate_check_box Enabled" to
         // "check_box Enabled" once checked). Redundant; removed.
-        await page.getByRole('button', { name: 'more_vert' }).click();
-        await page.getByText('Save and Stay').click();
+        await page.getByRole('button', { name: BUTTON_NAME.MORE_ACTIONS }).click();
+        await page.getByText(TEXT.SAVE_AND_STAY).click();
         // Same "dispatches, doesn't wait" gap as the other specs' Save and
         // Stay — without this, the next checkpoint's navigation races a
         // still-in-flight save, which surfaces as a "Keep Editing" prompt
@@ -170,7 +177,7 @@ test.describe('VP Sale Marketing > Approve OD + Approve P&L', () => {
       `Open P&L ${plNo} from the approval inbox`,
       'Searching by the saved P&L number surfaces the row and opens it.',
       async () => {
-        await page.getByRole('link', { name: 'order_approve OD' }).click();
+        await page.getByRole('link', { name: approvalInboxLinkName('OD') }).click();
         await openApprovalInbox(page, 'P&L');
         await searchApprovalInbox(page, plNo);
         await page.getByRole('cell', { name: plNo }).click();
@@ -183,8 +190,8 @@ test.describe('VP Sale Marketing > Approve OD + Approve P&L', () => {
       '3.2 Approve P&L',
       'The P&L Approve action is confirmed without a validation error.',
       async () => {
-        await page.getByRole('button', { name: 'radio_button_unchecked Approve' }).nth(1).click();
-        await page.getByRole('button', { name: 'check', exact: true }).click();
+        await page.getByRole('button', { name: BUTTON_NAME.RADIO_UNCHECKED_APPROVE }).nth(1).click();
+        await page.getByRole('button', { name: BUTTON_NAME.SAVE, exact: true }).click();
         // Same "dispatches, doesn't wait" gap fixed elsewhere in this file —
         // without settling here, Sign Out's own navigation races this save
         // and gets stuck fighting a recurring "Keep Editing" prompt

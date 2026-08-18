@@ -21,6 +21,21 @@
 import { Page, Locator, TestInfo, expect } from '@playwright/test';
 import fs from 'fs';
 import path from 'path';
+import {
+  ACCOUNT_MENU_EXPAND_TOGGLE_INDEX,
+  BUTTON_NAME,
+  CHECKBOX_NAME,
+  LINK_NAME,
+  PLACEHOLDER,
+  SEARCHBOX_NAME,
+  SELECTOR,
+  TAB_NAME,
+  TEXT,
+  TEXTBOX_NAME,
+  approvalInboxLinkName,
+  creatingItemIn,
+  nearestAncestorWithCreateNewButton,
+} from './locators';
 
 export const BASE_URL = process.env.DMC_BASE_URL || 'https://dmc-dev.intergateway.net';
 
@@ -66,14 +81,14 @@ export async function login(page: Page, role: Role) {
   const { email, password } = credentialsFor(role);
   await page.goto(`${BASE_URL}/admin/login`);
 
-  await page.getByRole('textbox', { name: 'Email' }).click();
-  await page.getByRole('textbox', { name: 'Email' }).pressSequentially(email, { delay: 30 });
-  await page.getByRole('textbox', { name: 'Password' }).click();
-  await page.getByRole('textbox', { name: 'Password' }).pressSequentially(password, { delay: 30 });
+  await page.getByRole('textbox', { name: TEXTBOX_NAME.EMAIL }).click();
+  await page.getByRole('textbox', { name: TEXTBOX_NAME.EMAIL }).pressSequentially(email, { delay: 30 });
+  await page.getByRole('textbox', { name: TEXTBOX_NAME.PASSWORD }).click();
+  await page.getByRole('textbox', { name: TEXTBOX_NAME.PASSWORD }).pressSequentially(password, { delay: 30 });
 
   const [loginResponse] = await Promise.all([
     page.waitForResponse((res) => res.url().includes('/auth/login')),
-    page.getByRole('button', { name: /sign in/i }).click(),
+    page.getByRole('button', { name: BUTTON_NAME.SIGN_IN }).click(),
   ]);
 
   if (!loginResponse.ok()) {
@@ -110,7 +125,7 @@ export async function login(page: Page, role: Role) {
 export async function ensureLoggedIn(page: Page, role: Role) {
   await page.goto(`${BASE_URL}/admin/content`);
   const authenticated = await page
-    .getByRole('link', { name: 'account_circle' })
+    .getByRole('link', { name: LINK_NAME.ACCOUNT_MENU })
     .waitFor({ state: 'visible', timeout: 8000 })
     .then(() => true)
     .catch(() => false);
@@ -149,11 +164,11 @@ export async function saveSession(page: Page, role: Role) {
  * steps), so this polls for the link instead of hardcoding a click count.
  */
 export async function signOut(page: Page) {
-  await page.getByRole('link', { name: 'account_circle' }).click();
-  const signOutLink = page.getByRole('link', { name: 'Sign Out' });
+  await page.getByRole('link', { name: LINK_NAME.ACCOUNT_MENU }).click();
+  const signOutLink = page.getByRole('link', { name: LINK_NAME.SIGN_OUT });
   for (let attempt = 0; attempt < 3; attempt++) {
     if (await signOutLink.isVisible().catch(() => false)) break;
-    await page.getByRole('button').nth(1).click().catch(() => {});
+    await page.getByRole('button').nth(ACCOUNT_MENU_EXPAND_TOGGLE_INDEX).click().catch(() => {});
   }
   await signOutLink.click();
   await page.waitForURL((url) => url.pathname.includes('/login'), { timeout: 15000 }).catch(() => {});
@@ -166,8 +181,8 @@ export async function signOut(page: Page) {
  * retries the original action.
  */
 export async function installKeepEditingHandler(page: Page) {
-  await page.addLocatorHandler(page.getByRole('button', { name: 'Keep Editing' }), async () => {
-    await page.getByRole('button', { name: 'Keep Editing' }).click();
+  await page.addLocatorHandler(page.getByRole('button', { name: BUTTON_NAME.KEEP_EDITING }), async () => {
+    await page.getByRole('button', { name: BUTTON_NAME.KEEP_EDITING }).click();
   });
 }
 
@@ -223,13 +238,40 @@ export async function checkpoint(
 
 /** Fails if the current dialog shows Directus's "invalid values" validation banner. */
 export async function expectNoValidationError(page: Page) {
-  const errorBanner = page.getByText('The following fields have invalid values');
+  const errorBanner = page.getByText(TEXT.INVALID_VALUES_BANNER);
   if (await errorBanner.isVisible().catch(() => false)) {
     const detail = await errorBanner
-      .locator('xpath=following-sibling::*[1]')
+      .locator(SELECTOR.FOLLOWING_SIBLING_FIRST)
       .innerText()
       .catch(() => '(could not read detail)');
     throw new Error(`Validation error shown: ${detail}`);
+  }
+}
+
+/** One compact line per run, appended to reports/history.jsonl — see appendHistory(). */
+export type HistoryEntry = {
+  slug: string;
+  title: string;
+  runAt: string; // ISO
+  passCount: number;
+  failCount: number;
+  skipCount: number;
+  /** Only the *first* failed checkpoint — enough to say "failed here", without repeating the full per-checkpoint table for every past run. */
+  firstFailure: { step: number; name: string; error: string } | null;
+};
+
+const HISTORY_PATH = path.resolve(__dirname, '..', '..', 'reports', 'history.jsonl');
+// One line per run, appended (not rewritten) — cheap regardless of file
+// size. Trimmed after each write so this can't grow unbounded over months
+// of runs; still one file, not one-per-run.
+const HISTORY_MAX_LINES = 300;
+
+function appendHistory(entry: HistoryEntry) {
+  fs.mkdirSync(path.dirname(HISTORY_PATH), { recursive: true });
+  fs.appendFileSync(HISTORY_PATH, JSON.stringify(entry) + '\n');
+  const lines = fs.readFileSync(HISTORY_PATH, 'utf-8').split('\n').filter(Boolean);
+  if (lines.length > HISTORY_MAX_LINES) {
+    fs.writeFileSync(HISTORY_PATH, lines.slice(-HISTORY_MAX_LINES).join('\n') + '\n');
   }
 }
 
@@ -238,7 +280,8 @@ export async function expectNoValidationError(page: Page) {
  * reports/<slug>-report.* (easy to open directly) and as Playwright test
  * attachments (visible in `npx playwright show-report`). Each spec file
  * passes its own slug/title so parallel/chained runs don't overwrite each
- * other's report.
+ * other's report. Also appends a one-line summary to reports/history.jsonl
+ * so dashboard-reporter.ts can show *past* runs, not just the latest.
  */
 export async function writeReport(
   testInfo: TestInfo,
@@ -281,6 +324,19 @@ export async function writeReport(
   fs.writeFileSync(path.join(reportsDir, `${opts.slug}-report.md`), markdown);
   fs.writeFileSync(path.join(reportsDir, `${opts.slug}-report.json`), json);
   fs.writeFileSync(path.join(reportsDir, `${opts.slug}-report.txt`), chatText);
+
+  appendHistory({
+    slug: opts.slug,
+    title: opts.title,
+    runAt: new Date().toISOString(),
+    passCount,
+    failCount: failures.length,
+    skipCount,
+    // Truncated — this is a "which run, which step, roughly why" timeline
+    // entry, not a replacement for the full report; long stack traces would
+    // just bloat history.jsonl across hundreds of runs for no benefit.
+    firstFailure: failures[0] ? { step: failures[0].step, name: failures[0].name, error: (failures[0].error ?? '').slice(0, 300) } : null,
+  });
 
   await testInfo.attach('expected-result-report.md', { body: markdown, contentType: 'text/markdown' });
   await testInfo.attach('expected-result-report.json', { body: json, contentType: 'application/json' });
@@ -379,7 +435,7 @@ export async function openRequirementByReqNo(page: Page, reqNo: string) {
 }
 
 export async function openRequirementAllFormsTab(page: Page) {
-  await page.getByRole('tab', { name: 'Requirement All Forms' }).click();
+  await page.getByRole('tab', { name: TAB_NAME.REQUIREMENT_ALL_FORMS }).click();
   await expect(page.getByText('Opportunity Decision (OD)')).toBeVisible();
   // The section title renders before its "Create New" button's permission
   // check finishes — without this wait, headless mode (faster than headed)
@@ -403,7 +459,7 @@ export type ODData = {
 export async function createOpportunityDecision(page: Page, data: ODData) {
   await clickCreateNewInSubsection(page, 'Opportunity Decisions');
 
-  await expect(page.getByText('Creating Item in OD')).toBeVisible();
+  await expect(page.getByText(creatingItemIn('OD'))).toBeVisible();
   // The slide-over panel is still animating in when its heading becomes
   // visible — interacting with fields immediately can hit "not stable".
   await page.waitForTimeout(500);
@@ -414,7 +470,7 @@ export async function createOpportunityDecision(page: Page, data: ODData) {
   // These are custom toggle buttons (role="checkbox" but state lives in
   // aria-pressed, not aria-checked), so use .click() — .check() asserts
   // aria-checked changed and always fails here even though the click works.
-  await page.getByRole('checkbox', { name: 'Product' }).click();
+  await page.getByRole('checkbox', { name: CHECKBOX_NAME.OD_PRODUCT_TOGGLE }).click();
 
   await (await inputByLabel(page, 'Route From')).fill(data.routeFrom);
   await (await inputByLabel(page, 'Route To')).fill(data.routeTo);
@@ -458,7 +514,7 @@ export async function createProfitLossStatement(page: Page, data: PLData) {
   // second (subsection) occurrence, not the first (category header).
   await clickCreateNewInSubsection(page, 'Profit Loss Statements', { last: true });
 
-  await expect(page.getByText('Creating Item in P&L')).toBeVisible();
+  await expect(page.getByText(creatingItemIn('P&L'))).toBeVisible();
   // The slide-over panel is still animating in — and its form is heavier
   // than OD's (License Type/Country Job/Job Code option lists to fetch) —
   // when its heading becomes visible, so wait for both the animation and
@@ -474,7 +530,7 @@ export async function createProfitLossStatement(page: Page, data: PLData) {
   await selectRelationalItem(page, 'Salesperson', data.salesperson);
 
   // Scroll to the date/customer fields further down the panel.
-  await (await fieldByLabel(page, 'Exchange Rate Date')).locator('.input').first().click();
+  await (await fieldByLabel(page, 'Exchange Rate Date')).locator(SELECTOR.FIELD_INPUT_TRIGGER).first().click();
   // Same inline-dropdown widget as the Salesperson picker (Deselect/Search
   // listitems followed by date options) — pick the first date-shaped one.
   await page.getByRole('listitem').filter({ hasText: /^\d{4}-\d{2}-\d{2}$/ }).first().click();
@@ -501,7 +557,7 @@ export async function createProfitLossStatement(page: Page, data: PLData) {
     .catch(() => false);
   if (!alreadyHasCircuit) {
     await clickCreateNewInSubsection(page, 'Circuits');
-    await expect(page.getByText('Creating Item in Circuit ID')).toBeVisible();
+    await expect(page.getByText(creatingItemIn('Circuit ID'))).toBeVisible();
     await (await inputByLabel(page, 'Circuit ID')).fill(data.circuitId);
     await saveNestedItem(page); // closes the Circuit sub-panel, back to the P&L's Information tab
   }
@@ -550,12 +606,12 @@ export function subsectionContainer(page: Page, subsectionLabel: string, opts?: 
   const label = opts?.last
     ? page.getByText(subsectionLabel, { exact: true }).last()
     : page.getByText(subsectionLabel, { exact: true }).first();
-  return label.locator('xpath=ancestor::*[.//button[contains(., "Create New")]][1]');
+  return label.locator(nearestAncestorWithCreateNewButton());
 }
 
 export async function clickCreateNewInSubsection(page: Page, subsectionLabel: string, opts?: { last?: boolean }) {
   const section = subsectionContainer(page, subsectionLabel, opts);
-  const button = section.getByRole('button', { name: 'Create New' }).first();
+  const button = section.getByRole('button', { name: BUTTON_NAME.CREATE_NEW }).first();
   // The button can render disabled briefly while its permission check
   // resolves; wait for it to become enabled instead of racing the click.
   await expect(button).toBeEnabled({ timeout: 15000 });
@@ -565,7 +621,7 @@ export async function clickCreateNewInSubsection(page: Page, subsectionLabel: st
   // as if it landed on a stale element reference from a layout that hadn't
   // finished settling. Verify a new panel actually opened and retry if not,
   // rather than letting the caller fail confusingly on some field lookup.
-  const articlesBefore = await page.locator('article').count();
+  const articlesBefore = await page.locator(SELECTOR.DIALOG_PANEL).count();
   for (let attempt = 1; attempt <= 3; attempt++) {
     await button.click();
     const opened = await page
@@ -582,13 +638,13 @@ export async function clickCreateNewInSubsection(page: Page, subsectionLabel: st
 export async function saveNestedItem(page: Page) {
   // Dialog/panel save button — the icon-only checkmark, top-right of the
   // slide-over panel. Its accessible name is the Material icon ligature "check".
-  await page.getByRole('button', { name: 'check', exact: true }).last().click();
+  await page.getByRole('button', { name: BUTTON_NAME.SAVE, exact: true }).last().click();
   // Wait for the slide-over to close and the underlying page to settle.
   await page.waitForTimeout(500);
 }
 
 export async function saveOuterRequirement(page: Page, reqNo: string) {
-  const saveButton = page.getByRole('button', { name: 'check', exact: true }).last();
+  const saveButton = page.getByRole('button', { name: BUTTON_NAME.SAVE, exact: true }).last();
   // If the outer Requirement genuinely has no pending field changes, its
   // Save button stays disabled/loading and never becomes clickable — treat
   // that as "nothing to save" rather than burning the whole test budget.
@@ -643,10 +699,10 @@ export async function saveOuterRequirement(page: Page, reqNo: string) {
  * "Capacity Unit" field, so inexact matching would grab the wrong one.
  */
 export async function fieldByLabel(page: Page, label: string): Promise<Locator> {
-  const dialogs = page.locator('article');
+  const dialogs = page.locator(SELECTOR.DIALOG_PANEL);
   const scope = (await dialogs.count()) > 0 ? dialogs.last() : page;
   return scope
-    .locator('.field, .v-form .field')
+    .locator(SELECTOR.FIELD_CONTAINER)
     .filter({ has: page.getByText(label, { exact: true }) })
     .first();
 }
@@ -657,7 +713,7 @@ export async function fieldByLabel(page: Page, label: string): Promise<Locator> 
  * getByLabel() never matches — resolve via the field container instead.
  */
 export async function inputByLabel(page: Page, label: string): Promise<Locator> {
-  return (await fieldByLabel(page, label)).locator('input, textarea').first();
+  return (await fieldByLabel(page, label)).locator(SELECTOR.INPUT_OR_TEXTAREA).first();
 }
 
 /**
@@ -670,16 +726,16 @@ export async function inputByLabel(page: Page, label: string): Promise<Locator> 
  */
 export async function setMaxPerPage(page: Page, scope: Locator | Page) {
   const ready = await scope
-    .getByText('Per Page', { exact: true })
+    .getByText(TEXT.PER_PAGE, { exact: true })
     .waitFor({ state: 'visible', timeout: 3000 })
     .then(() => true)
     .catch(() => false);
   if (!ready) return;
   await scope
-    .getByText('25', { exact: true })
+    .getByText(TEXT.PAGE_SIZE_25, { exact: true })
     .last()
     .click({ timeout: 5000 })
-    .then(() => page.getByText('1000', { exact: true }).first().click({ force: true, timeout: 5000 }))
+    .then(() => page.getByText(TEXT.PAGE_SIZE_1000, { exact: true }).first().click({ force: true, timeout: 5000 }))
     .then(() => page.waitForLoadState('networkidle'))
     .catch(() => {});
 }
@@ -694,8 +750,8 @@ export async function setMaxPerPage(page: Page, scope: Locator | Page) {
  */
 export async function selectRelationalItem(page: Page, label: string, itemText: string) {
   const field = await fieldByLabel(page, label);
-  const articlesBefore = await page.locator('article').count();
-  await field.locator('.input').first().click();
+  const articlesBefore = await page.locator(SELECTOR.DIALOG_PANEL).count();
+  await field.locator(SELECTOR.FIELD_INPUT_TRIGGER).first().click();
 
   const opensFullModal = await page
     .locator('article')
@@ -705,12 +761,12 @@ export async function selectRelationalItem(page: Page, label: string, itemText: 
     .catch(() => false);
 
   if (opensFullModal) {
-    const dialog = page.locator('article').last();
+    const dialog = page.locator(SELECTOR.DIALOG_PANEL).last();
     await setMaxPerPage(page, dialog);
 
     // Scope to the just-opened dialog: page-wide getByPlaceholder('Search')
     // also matches the sidebar's "Search Collection..." box.
-    const modalSearch = dialog.getByPlaceholder(/search/i);
+    const modalSearch = dialog.getByPlaceholder(PLACEHOLDER.SEARCH);
     const modalSearchReady = await modalSearch
       .waitFor({ state: 'visible', timeout: 3000 })
       .then(() => true)
@@ -731,7 +787,7 @@ export async function selectRelationalItem(page: Page, label: string, itemText: 
     await page.getByRole('row', { name: itemText }).first().click();
 
     // The dialog stays open after picking a row; confirm/close it.
-    const confirmButton = dialog.getByRole('button', { name: 'check', exact: true });
+    const confirmButton = dialog.getByRole('button', { name: BUTTON_NAME.SAVE, exact: true });
     if (await confirmButton.isVisible().catch(() => false)) {
       await confirmButton.click();
     }
@@ -739,7 +795,7 @@ export async function selectRelationalItem(page: Page, label: string, itemText: 
   } else {
     // Inline dropdown: a small popup with its own "Search" box and a plain
     // listitem per record (display name only — matches by name, not email).
-    const inlineSearch = page.getByRole('textbox', { name: 'Search', exact: true });
+    const inlineSearch = page.getByRole('textbox', { name: TEXTBOX_NAME.INLINE_PICKER_SEARCH, exact: true });
     if (await inlineSearch.isVisible().catch(() => false)) {
       await inlineSearch.fill(itemText);
       await page.waitForLoadState('networkidle').catch(() => {});
@@ -754,14 +810,14 @@ export async function selectRelationalItem(page: Page, label: string, itemText: 
     await page.getByRole('listitem').filter({ hasText: itemText }).first().click();
     // Same lingering-menu risk as selectDropdownOption's popup — wait for it
     // to actually close before the caller moves on to the next field.
-    await page.locator('#menu-outlet').waitFor({ state: 'hidden', timeout: 3000 }).catch(() => {});
+    await page.locator(SELECTOR.MENU_OUTLET).waitFor({ state: 'hidden', timeout: 3000 }).catch(() => {});
   }
 }
 
 /** Standard Directus <select>/dropdown field (radio-style value list). */
 export async function selectDropdownOption(page: Page, label: string, optionText: string) {
   const field = await fieldByLabel(page, label);
-  await field.locator('.input').first().click();
+  await field.locator(SELECTOR.FIELD_INPUT_TRIGGER).first().click();
   // The options popup renders into a shared #menu-outlet portal, detached
   // from the field's own DOM subtree, under the dialog's own overlay
   // (z-index quirk) — force bypasses that. Short option labels like License
@@ -769,13 +825,13 @@ export async function selectDropdownOption(page: Page, label: string, optionText
   // unrelated badge elsewhere in the chrome) — page.getByText(...).first()
   // can silently click that instead of the real option, leaving the field
   // null with no error. Scope to the portal so only actual menu items match.
-  const menu = page.locator('#menu-outlet');
+  const menu = page.locator(SELECTOR.MENU_OUTLET);
   const option = menu.getByText(optionText, { exact: true }).first();
   await option.waitFor({ state: 'visible', timeout: 5000 });
   await option.click({ force: true });
   // The dropdown's menu portal can linger open after picking an option and
   // intercept clicks on whatever field comes next — wait for it to clear.
-  await page.locator('#menu-outlet').waitFor({ state: 'hidden', timeout: 3000 }).catch(() => {});
+  await page.locator(SELECTOR.MENU_OUTLET).waitFor({ state: 'hidden', timeout: 3000 }).catch(() => {});
 }
 
 /**
@@ -789,7 +845,7 @@ export async function selectDropdownOption(page: Page, label: string, optionText
  */
 export async function toggleCategoryCheckbox(page: Page, label: string) {
   const labelNode = page.getByText(label, { exact: true }).last();
-  const row = labelNode.locator('xpath=ancestor::*[.//*[@role="checkbox"]][1]');
+  const row = labelNode.locator(SELECTOR.NEAREST_ANCESTOR_WITH_CHECKBOX);
   await row.getByRole('checkbox').click();
 }
 
@@ -813,10 +869,10 @@ export async function selectRadioByLabel(page: Page, label: string, optionText: 
 /** Opens a Directus date-picker field and selects today's date. */
 export async function pickDateToday(page: Page, label: string) {
   const field = await fieldByLabel(page, label);
-  await field.locator('.input').first().click();
-  await page.getByText('Set to Now').click().catch(async () => {
+  await field.locator(SELECTOR.FIELD_INPUT_TRIGGER).first().click();
+  await page.getByText(TEXT.SET_TO_NOW).click().catch(async () => {
     // Fallback: click the highlighted/today cell in the calendar grid.
-    await page.locator('.today, [aria-current="date"]').first().click();
+    await page.locator(SELECTOR.TODAY_CELL).first().click();
   });
 }
 
@@ -836,14 +892,14 @@ export async function pickDateToday(page: Page, label: string) {
  * visible (a no-op if some earlier step already expanded it).
  */
 export async function openApprovalInbox(page: Page, kind: 'OD' | 'P&L') {
-  const link = page.getByRole('link', { name: `order_approve ${kind}` });
+  const link = page.getByRole('link', { name: approvalInboxLinkName(kind) });
   if (!(await link.isVisible().catch(() => false))) {
     await page.getByRole('listitem').filter({ hasText: 'Approval' }).last().click();
     await link.waitFor({ state: 'visible', timeout: 5000 });
   }
   await link.click();
   await page.waitForLoadState('networkidle');
-  const closeButton = page.getByRole('button', { name: 'close' });
+  const closeButton = page.getByRole('button', { name: BUTTON_NAME.CLOSE });
   if (await closeButton.isVisible().catch(() => false)) {
     await closeButton.click();
   }
@@ -851,8 +907,8 @@ export async function openApprovalInbox(page: Page, kind: 'OD' | 'P&L') {
 
 /** Uses the inbox's search box to filter down to a single OD/P&L number. */
 export async function searchApprovalInbox(page: Page, no: string) {
-  await page.getByRole('button', { name: 'search' }).click();
-  await page.getByRole('searchbox', { name: 'Search Items...' }).fill(no);
+  await page.getByRole('button', { name: BUTTON_NAME.SEARCH }).click();
+  await page.getByRole('searchbox', { name: SEARCHBOX_NAME.APPROVAL_INBOX }).fill(no);
   await page.waitForLoadState('networkidle');
   // The search is debounced client-side — networkidle only tracks network
   // requests, not the (also debounced) re-render of the filtered rows. A

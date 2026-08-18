@@ -57,6 +57,18 @@ import {
   CheckpointResult,
 } from './support/directus';
 import { requireFlowState } from './support/flow-state';
+import {
+  BUTTON_NAME,
+  BW_TYPE_DROPDOWN_TRIGGER,
+  CHECKBOX_NAME,
+  COMMON_COST_FIELD,
+  DATE_RANGE_PICKER,
+  SECTION_BUTTON_NAME,
+  SELECTOR,
+  TEXT,
+  creatingItemIn,
+  datePickerCell,
+} from './support/locators';
 
 test.describe('Sale Marketing > OD waiting-for-approve + P&L input detail', () => {
   test.beforeEach(() => {
@@ -103,10 +115,10 @@ test.describe('Sale Marketing > OD waiting-for-approve + P&L input detail', () =
       '1.1 OD — submit Marketing Department "Product" checklist item',
       'The OD Approval tab accepts the Marketing Department checklist and the item is confirmed (OD moves to Waiting for approve).',
       async () => {
-        await page.getByRole('button', { name: 'Approval' }).click();
-        await page.getByText('Marketing Department').click();
-        await page.getByRole('checkbox', { name: 'check_box_outline_blank Product' }).click();
-        await page.locator('#dialog-outlet').getByRole('button', { name: 'check', exact: true }).click();
+        await page.getByRole('button', { name: SECTION_BUTTON_NAME.APPROVAL }).click();
+        await page.getByText(TEXT.MARKETING_DEPARTMENT).click();
+        await page.getByRole('checkbox', { name: CHECKBOX_NAME.MARKETING_PRODUCT_REQUIRED }).click();
+        await page.locator(SELECTOR.DIALOG_OUTLET).getByRole('button', { name: BUTTON_NAME.SAVE, exact: true }).click();
         // That "check" only confirms a small approval sub-dialog — the OD
         // itself is still open as its own right-side slide-in drawer on top
         // of the Requirement's "All Forms" page, and was never explicitly
@@ -195,10 +207,10 @@ test.describe('Sale Marketing > OD waiting-for-approve + P&L input detail', () =
       '1.2 P&L — Save and Stay (Waiting for initiation)',
       'The P&L dialog and outer panel save without a validation error; the P&L moves to Waiting for initiation.',
       async () => {
-        await page.getByRole('checkbox', { name: 'indeterminate_check_box' }).click();
-        await page.locator('#dialog-outlet').getByRole('button', { name: 'check' }).click();
-        await page.getByRole('button', { name: 'more_vert' }).click();
-        await page.getByText('Save and Stay').click();
+        await page.getByRole('checkbox', { name: CHECKBOX_NAME.INDETERMINATE }).click();
+        await page.locator(SELECTOR.DIALOG_OUTLET).getByRole('button', { name: BUTTON_NAME.SAVE }).click();
+        await page.getByRole('button', { name: BUTTON_NAME.MORE_ACTIONS }).click();
+        await page.getByText(TEXT.SAVE_AND_STAY).click();
         // "Save and Stay" only *dispatches* the save — without waiting for
         // it to actually settle, the next checkpoint (Sign out) can race a
         // still-in-flight save. Observed effect: the P&L silently stayed in
@@ -270,9 +282,7 @@ test.describe('Sale Marketing > OD waiting-for-approve + P&L input detail', () =
 async function setPLBwType(page: Page, bwType: string) {
   // Custom "v-menu" widget, not the standard dropdown selectDropdownOption
   // expects (its options don't render into the shared #menu-outlet portal).
-  await page
-    .locator('.group-raw > div > div:nth-child(4) > .interface > div > .v-menu > .v-menu-activator > .v-input > .input')
-    .click();
+  await page.locator(BW_TYPE_DROPDOWN_TRIGGER).click();
   await page.getByText(bwType).click();
 }
 
@@ -297,8 +307,8 @@ const MONTH_ABBR = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep
 async function navigateCalendarToMonth(page: Page, targetDate: string /* 'YYYY-MM-DD' */) {
   const targetMonthIndex = Number(targetDate.slice(5, 7)) - 1;
   const targetYear = Number(targetDate.slice(0, 4));
-  const monthToggle = page.getByRole('button', { name: /-Open months overlay$/ }).first();
-  const yearToggle = page.getByRole('button', { name: /-Open years overlay$/ }).first();
+  const monthToggle = page.getByRole('button', { name: DATE_RANGE_PICKER.MONTH_OVERLAY_TOGGLE }).first();
+  const yearToggle = page.getByRole('button', { name: DATE_RANGE_PICKER.YEAR_OVERLAY_TOGGLE }).first();
   for (let i = 0; i < 36; i++) {
     const monthLabel = (await monthToggle.innerText()).trim();
     const yearLabel = (await yearToggle.innerText()).trim();
@@ -306,7 +316,7 @@ async function navigateCalendarToMonth(page: Page, targetDate: string /* 'YYYY-M
     const currentYear = Number(yearLabel);
     if (currentMonthIndex === targetMonthIndex && currentYear === targetYear) return;
     const goBack = currentYear * 12 + currentMonthIndex > targetYear * 12 + targetMonthIndex;
-    await page.getByRole('button', { name: goBack ? 'Previous month' : 'Next month' }).click({ timeout: 5_000 });
+    await page.getByRole('button', { name: goBack ? BUTTON_NAME.PREVIOUS_MONTH : BUTTON_NAME.NEXT_MONTH }).click({ timeout: 5_000 });
   }
   throw new Error(`Could not navigate the calendar to ${targetDate}.`);
 }
@@ -319,22 +329,22 @@ async function navigateCalendarToMonth(page: Page, targetDate: string /* 'YYYY-M
  * navigateCalendarToMonth) — never assume either date is already visible.
  */
 async function pickPLPeriodDateRange(page: Page, data: { endDate: string; startDate: string }) {
-  await page.locator('[data-test-id="dp-input"]').click();
+  await page.locator(SELECTOR.DATE_PICKER_INPUT).click();
   await navigateCalendarToMonth(page, data.endDate);
   const endDay = data.endDate.slice(-2).replace(/^0/, '');
   // `[data-test-id="dp-YYYY-MM-DD"]` can match twice: the real cell in its
   // own month's pane, plus a grayed-out "offset" cell showing that same
   // date at the leading/trailing edge of the *adjacent* pane's grid (to
   // fill out its week rows). `.first()` is the real (non-offset) cell.
-  await page.locator(`[data-test-id="dp-${data.endDate}"]`).getByText(endDay, { exact: true }).first().click({ timeout: 10_000 });
+  await page.locator(datePickerCell(data.endDate)).getByText(endDay, { exact: true }).first().click({ timeout: 10_000 });
   await navigateCalendarToMonth(page, data.startDate);
   const startDay = data.startDate.slice(-2).replace(/^0/, '');
-  await page.locator(`[data-test-id="dp-${data.startDate}"]`).getByText(startDay, { exact: true }).first().click({ timeout: 10_000 });
+  await page.locator(datePickerCell(data.startDate)).getByText(startDay, { exact: true }).first().click({ timeout: 10_000 });
 }
 
 /** Common Cost tab: a fixed set of line-item rows (BW Type 2's standard cost breakdown), each with 1-2 numeric fields. */
 async function fillPLCommonCost(page: Page) {
-  await page.getByRole('button', { name: 'Common Cost' }).click();
+  await page.getByRole('button', { name: SECTION_BUTTON_NAME.COMMON_COST }).click();
 
   await page.getByRole('spinbutton').first().click();
   await page.getByRole('spinbutton').first().fill('11');
@@ -348,84 +358,36 @@ async function fillPLCommonCost(page: Page) {
   await page.getByRole('spinbutton').nth(4).click();
   await page.getByRole('spinbutton').nth(4).fill('1');
 
-  await page
-    .locator('div:nth-child(4) > .content > .v-form > .field.half.first-visible-field > .interface > .v-input > .input > input')
-    .click();
-  await page
-    .locator('div:nth-child(4) > .content > .v-form > .field.half.first-visible-field > .interface > .v-input > .input > input')
-    .fill('1');
-  await page
-    .locator('div:nth-child(4) > .content > .v-form > div:nth-child(3) > .interface > .v-input > .input > input')
-    .click();
-  await page
-    .locator('div:nth-child(4) > .content > .v-form > div:nth-child(3) > .interface > .v-input > .input > input')
-    .fill('1');
-  await page
-    .locator('div:nth-child(5) > .content > .v-form > .field.half.first-visible-field > .interface > .v-input > .input > input')
-    .click();
-  await page
-    .locator('div:nth-child(5) > .content > .v-form > .field.half.first-visible-field > .interface > .v-input > .input > input')
-    .fill('1');
-  await page
-    .locator('div:nth-child(5) > .content > .v-form > div:nth-child(3) > .interface > .v-input > .input > input')
-    .click();
-  await page
-    .locator('div:nth-child(5) > .content > .v-form > .field.half.first-visible-field > .interface > .v-input > .input > input')
-    .fill('11');
-  await page
-    .locator('div:nth-child(5) > .content > .v-form > .field.half.first-visible-field > .interface > .v-input > .input > input')
-    .click();
-  await page
-    .locator('div:nth-child(5) > .content > .v-form > .field.half.first-visible-field > .interface > .v-input > .input > input')
-    .fill('1');
-  await page
-    .locator('div:nth-child(5) > .content > .v-form > div:nth-child(3) > .interface > .v-input > .input > input')
-    .click();
-  await page
-    .locator('div:nth-child(5) > .content > .v-form > div:nth-child(3) > .interface > .v-input > .input > input')
-    .fill('1');
-  await page
-    .locator('div:nth-child(6) > .content > .v-form > div:nth-child(3) > .interface > .v-input > .input > input')
-    .click();
-  await page
-    .locator('div:nth-child(5) > .content > .v-form > div:nth-child(3) > .interface > .v-input > .input > input')
-    .fill('11');
-  await page
-    .locator('div:nth-child(5) > .content > .v-form > div:nth-child(3) > .interface > .v-input > .input > input')
-    .click();
-  await page
-    .locator('div:nth-child(5) > .content > .v-form > div:nth-child(3) > .interface > .v-input > .input > input')
-    .fill('1');
-  await page.locator('.v-form.grid.with-fill > div:nth-child(5) > .content > .v-form > .field.full > .interface > div').click();
-  await page
-    .locator('div:nth-child(6) > .content > .v-form > div:nth-child(3) > .interface > .v-input > .input > input')
-    .click();
-  await page
-    .locator('div:nth-child(6) > .content > .v-form > div:nth-child(3) > .interface > .v-input > .input > input')
-    .fill('1');
+  await page.locator(COMMON_COST_FIELD.ROW4_FIRST_VISIBLE_INPUT).click();
+  await page.locator(COMMON_COST_FIELD.ROW4_FIRST_VISIBLE_INPUT).fill('1');
+  await page.locator(COMMON_COST_FIELD.ROW4_COL3_INPUT).click();
+  await page.locator(COMMON_COST_FIELD.ROW4_COL3_INPUT).fill('1');
+  await page.locator(COMMON_COST_FIELD.ROW5_FIRST_VISIBLE_INPUT).click();
+  await page.locator(COMMON_COST_FIELD.ROW5_FIRST_VISIBLE_INPUT).fill('1');
+  await page.locator(COMMON_COST_FIELD.ROW5_COL3_INPUT).click();
+  await page.locator(COMMON_COST_FIELD.ROW5_FIRST_VISIBLE_INPUT).fill('11');
+  await page.locator(COMMON_COST_FIELD.ROW5_FIRST_VISIBLE_INPUT).click();
+  await page.locator(COMMON_COST_FIELD.ROW5_FIRST_VISIBLE_INPUT).fill('1');
+  await page.locator(COMMON_COST_FIELD.ROW5_COL3_INPUT).click();
+  await page.locator(COMMON_COST_FIELD.ROW5_COL3_INPUT).fill('1');
+  await page.locator(COMMON_COST_FIELD.ROW6_COL3_INPUT).click();
+  await page.locator(COMMON_COST_FIELD.ROW5_COL3_INPUT).fill('11');
+  await page.locator(COMMON_COST_FIELD.ROW5_COL3_INPUT).click();
+  await page.locator(COMMON_COST_FIELD.ROW5_COL3_INPUT).fill('1');
+  await page.locator(COMMON_COST_FIELD.ROW5_FULL_WIDTH_TOGGLE).click();
+  await page.locator(COMMON_COST_FIELD.ROW6_COL3_INPUT).click();
+  await page.locator(COMMON_COST_FIELD.ROW6_COL3_INPUT).fill('1');
 
-  await page.locator('div:nth-child(2) > .interface > .v-input > .input > input').first().click();
-  await page.locator('div:nth-child(2) > .interface > .v-input > .input > input').first().fill('1');
+  await page.locator(COMMON_COST_FIELD.FIXED_RATE_INPUT).first().click();
+  await page.locator(COMMON_COST_FIELD.FIXED_RATE_INPUT).first().fill('1');
   await page.getByText('Fixed Rate (USD)0.03').click();
 
-  await page
-    .locator('div:nth-child(7) > .content > .v-form > div:nth-child(3) > .interface > .v-input > .input > input')
-    .click();
-  await page
-    .locator('div:nth-child(7) > .content > .v-form > div:nth-child(3) > .interface > .v-input > .input > input')
-    .fill('1');
-  await page
-    .locator('div:nth-child(8) > .content > .v-form > div:nth-child(2) > .interface > .v-input > .input > input')
-    .click();
-  await page
-    .locator('div:nth-child(8) > .content > .v-form > div:nth-child(2) > .interface > .v-input > .input > input')
-    .fill('1');
-  await page
-    .locator('div:nth-child(8) > .content > .v-form > div:nth-child(3) > .interface > .v-input > .input > input')
-    .click();
-  await page
-    .locator('div:nth-child(8) > .content > .v-form > div:nth-child(3) > .interface > .v-input > .input > input')
-    .fill('1');
+  await page.locator(COMMON_COST_FIELD.ROW7_COL3_INPUT).click();
+  await page.locator(COMMON_COST_FIELD.ROW7_COL3_INPUT).fill('1');
+  await page.locator(COMMON_COST_FIELD.ROW8_COL2_INPUT).click();
+  await page.locator(COMMON_COST_FIELD.ROW8_COL2_INPUT).fill('1');
+  await page.locator(COMMON_COST_FIELD.ROW8_COL3_INPUT).click();
+  await page.locator(COMMON_COST_FIELD.ROW8_COL3_INPUT).fill('1');
 }
 
 /**
@@ -438,7 +400,7 @@ async function fillPLCommonCost(page: Page) {
  * fillPLAdditionalCostAndIncome).
  */
 async function fillPLSaleCost(page: Page) {
-  await page.getByRole('button', { name: 'Sale Cost' }).click();
+  await page.getByRole('button', { name: SECTION_BUTTON_NAME.SALE_COST }).click();
 
   // "Marketing Assistance"'s own Enabled checkbox — toggling it is what
   // reveals its OTC/MRC/ARC detail fields below.
@@ -471,15 +433,15 @@ type IncomeItem = {
  * here). Two items, added and saved one at a time via "add".
  */
 async function fillPLIncome(page: Page) {
-  await page.getByRole('button', { name: 'Income' }).click();
+  await page.getByRole('button', { name: SECTION_BUTTON_NAME.INCOME }).click();
 
   await addIncomeItem(page, { name: 'Income001 automation', duration: '12', durationType: 'Month(s)', price: '100000', usoFee: 'No' });
   await addIncomeItem(page, { name: 'Income automation 3', duration: '2', durationType: 'Month(s)', price: '3000', vat: '7%', usoFee: 'Yes' });
 }
 
 async function addIncomeItem(page: Page, data: IncomeItem) {
-  await page.getByRole('button', { name: 'add', exact: true }).first().click();
-  await expect(page.getByText('Creating Item in Incomes')).toBeVisible();
+  await page.getByRole('button', { name: BUTTON_NAME.ADD, exact: true }).first().click();
+  await expect(page.getByText(creatingItemIn('Incomes'))).toBeVisible();
 
   await (await inputByLabel(page, 'Income Detail')).fill(data.name);
   await selectRadioByLabel(page, 'Currency', 'USD');
@@ -489,7 +451,7 @@ async function addIncomeItem(page: Page, data: IncomeItem) {
   if (data.vat) await selectDropdownOption(page, 'VAT (%)', data.vat);
   await selectRadioByLabel(page, 'Uso Fee', data.usoFee);
 
-  await page.getByRole('button', { name: 'check', exact: true }).last().click();
+  await page.getByRole('button', { name: BUTTON_NAME.SAVE, exact: true }).last().click();
 }
 
 type AdditionalCostItem = {
@@ -518,7 +480,7 @@ type AdditionalIncomeItem = {
  * Details", not "Additional").
  */
 async function fillPLAdditionalCostAndIncome(page: Page) {
-  await page.getByRole('button', { name: 'Additional' }).click();
+  await page.getByRole('button', { name: SECTION_BUTTON_NAME.ADDITIONAL }).click();
 
   await toggleCategoryCheckbox(page, 'Additional Cost');
   await addAdditionalCostItem(page, {
@@ -567,12 +529,12 @@ async function fillPLAdditionalCostAndIncome(page: Page) {
  */
 function categorySection(page: Page, label: 'Additional Cost' | 'Additional Income') {
   const labelNode = page.getByText(label, { exact: true }).last();
-  return labelNode.locator('xpath=ancestor::*[.//table][1]');
+  return labelNode.locator(SELECTOR.NEAREST_ANCESTOR_WITH_TABLE);
 }
 
 async function addAdditionalCostItem(page: Page, data: AdditionalCostItem) {
-  await categorySection(page, 'Additional Cost').getByRole('button', { name: 'add', exact: true }).first().click();
-  await expect(page.getByText('Creating Item in Additional Costs')).toBeVisible();
+  await categorySection(page, 'Additional Cost').getByRole('button', { name: BUTTON_NAME.ADD, exact: true }).first().click();
+  await expect(page.getByText(creatingItemIn('Additional Costs'))).toBeVisible();
 
   await (await inputByLabel(page, 'Additional Cost Detail')).fill(data.name);
   await selectRadioByLabel(page, 'OTC/NRC Currency', 'USD');
@@ -585,12 +547,12 @@ async function addAdditionalCostItem(page: Page, data: AdditionalCostItem) {
   await selectRadioByLabel(page, 'ARC Currency', 'USD');
   await (await inputByLabel(page, 'ARC Amount')).fill(data.arcAmount);
 
-  await page.getByRole('button', { name: 'check', exact: true }).last().click();
+  await page.getByRole('button', { name: BUTTON_NAME.SAVE, exact: true }).last().click();
 }
 
 async function addAdditionalIncomeItem(page: Page, data: AdditionalIncomeItem) {
-  await categorySection(page, 'Additional Income').getByRole('button', { name: 'add', exact: true }).first().click();
-  await expect(page.getByText('Creating Item in Additional Incomes')).toBeVisible();
+  await categorySection(page, 'Additional Income').getByRole('button', { name: BUTTON_NAME.ADD, exact: true }).first().click();
+  await expect(page.getByText(creatingItemIn('Additional Incomes'))).toBeVisible();
 
   // Note the app's own typo in this label: "Additonal", not "Additional".
   await (await inputByLabel(page, 'Additonal Income Details')).fill(data.name);
@@ -600,5 +562,5 @@ async function addAdditionalIncomeItem(page: Page, data: AdditionalIncomeItem) {
   await (await inputByLabel(page, 'Price')).fill(data.price);
   if (data.vat) await selectDropdownOption(page, 'VAT (%)', data.vat);
 
-  await page.getByRole('button', { name: 'check', exact: true }).last().click();
+  await page.getByRole('button', { name: BUTTON_NAME.SAVE, exact: true }).last().click();
 }

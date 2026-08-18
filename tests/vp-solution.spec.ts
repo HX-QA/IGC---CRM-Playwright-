@@ -17,6 +17,7 @@
 import { test, expect } from '@playwright/test';
 import { checkpoint, installKeepEditingHandler, login, openApprovalInbox, searchApprovalInbox, signOut, writeReport, CheckpointResult } from './support/directus';
 import { requireFlowState } from './support/flow-state';
+import { BUTTON_NAME, TEXT, approvalInboxLinkName } from './support/locators';
 
 test.describe('VP Solution > Approve P&L', () => {
   test.beforeEach(() => {
@@ -59,14 +60,14 @@ test.describe('VP Solution > Approve P&L', () => {
       '3.1 Approve P&L',
       'The P&L Approve action is confirmed without a validation error and the row shows "Waiting for approve".',
       async () => {
-        await page.getByRole('button', { name: 'radio_button_unchecked Approve' }).click();
-        await page.getByRole('button', { name: 'check', exact: true }).click();
-        await page.locator('div').filter({ hasText: /^Waiting for approve$/ }).click();
+        await page.getByRole('button', { name: BUTTON_NAME.RADIO_UNCHECKED_APPROVE }).click();
+        await page.getByRole('button', { name: BUTTON_NAME.SAVE, exact: true }).click();
+        await page.locator('div').filter({ hasText: new RegExp(`^${TEXT.WAITING_FOR_APPROVE}$`) }).click();
       }
     );
 
     await checkpoint(page, report, 'Sign out', 'The account menu Sign Out link returns the app to /login.', async () => {
-      await page.getByRole('link', { name: 'order_approve P&L' }).click();
+      await page.getByRole('link', { name: approvalInboxLinkName('P&L') }).click();
       await signOut(page);
     });
 

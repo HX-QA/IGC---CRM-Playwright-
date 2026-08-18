@@ -40,6 +40,7 @@ import {
   CheckpointResult,
 } from './support/directus';
 import { readFlowState, requireFlowState, writeFlowState } from './support/flow-state';
+import { TEXT } from './support/locators';
 
 const SALESPERSON = process.env.DMC_SALESPERSON || 'Thitapa Sales';
 
@@ -134,7 +135,7 @@ test.describe('Requirements > Requirement All Forms > Profit & Loss Statement (P
         const plSection = subsectionContainer(page, 'Profit Loss Statements', { last: true });
         // Positive assertion first — see create-od.spec.ts for why.
         await expect(plSection).toBeVisible({ timeout: 10_000 });
-        await expect(plSection.getByText('No items')).not.toBeVisible();
+        await expect(plSection.getByText(TEXT.NO_ITEMS)).not.toBeVisible();
         // Not anchored with ^ — see create-od.spec.ts for why.
         plNo = await readSubsectionItemNo(page, 'Profit Loss Statements', /PL-\d{2}-\d{3}/, { last: true });
         expect(plNo).toMatch(/^PL-\d{2}-\d{3}$/);

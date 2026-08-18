@@ -42,6 +42,7 @@
 
 import { test, expect } from '@playwright/test';
 import { installKeepEditingHandler, login, setMaxPerPage } from './support/directus';
+import { BUTTON_NAME, deleteConfirmPrompt } from './support/locators';
 
 const NAME_PATTERN = process.env.CLEANUP_PROJECT_NAME_PATTERN || 'Mock Project - Network Upgrade Test';
 const CONFIRMED = process.env.CONFIRM_CLEANUP === 'yes';
@@ -99,7 +100,7 @@ test.describe('Maintenance > delete mock Requirements created by test runs', () 
       await rows.nth(i).getByRole('checkbox').first().click();
     }
 
-    const deleteButton = page.getByRole('button', { name: 'delete', exact: true });
+    const deleteButton = page.getByRole('button', { name: BUTTON_NAME.DELETE, exact: true });
     await expect(deleteButton, 'No bulk "delete" action appeared after selecting rows — this role may lack delete permission.').toBeVisible({
       timeout: 5_000,
     });
@@ -109,10 +110,10 @@ test.describe('Maintenance > delete mock Requirements created by test runs', () 
     // want to delete these N items? This action can not be undone.") isn't
     // wrapped in a role="dialog" element, so scope by its own text instead.
     await expect(
-      page.getByText(/Are you sure you want to delete these \d+ items\?/),
+      page.getByText(deleteConfirmPrompt()),
       'Expected the delete-confirmation prompt after clicking the bulk delete action.'
     ).toBeVisible({ timeout: 5_000 });
-    const confirmButton = page.getByRole('button', { name: 'Delete', exact: true }).last();
+    const confirmButton = page.getByRole('button', { name: BUTTON_NAME.DELETE_CONFIRM, exact: true }).last();
     await confirmButton.click();
     await page.waitForLoadState('networkidle');
 

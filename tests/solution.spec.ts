@@ -24,6 +24,15 @@
 import { test, expect, Page } from '@playwright/test';
 import { checkpoint, expectNoValidationError, installKeepEditingHandler, login, openApprovalInbox, searchApprovalInbox, signOut, writeReport, CheckpointResult } from './support/directus';
 import { requireFlowState } from './support/flow-state';
+import {
+  BUTTON_NAME,
+  CHECKBOX_NAME,
+  SECTION_BUTTON_NAME,
+  SELECTOR,
+  SOLUTION_COST_FIELD,
+  SORT_DESC_ICON_TRIGGER,
+  TEXT,
+} from './support/locators';
 
 test.describe('Solution > P&L Solution Cost (Initiated / Waiting for approve)', () => {
   test.beforeEach(() => {
@@ -51,15 +60,15 @@ test.describe('Solution > P&L Solution Cost (Initiated / Waiting for approve)', 
       'Sorting descending and searching by the saved P&L number surfaces the row in "Waiting for initiation" status.',
       async () => {
         await openApprovalInbox(page, 'P&L');
-        await page.locator('.align-left.actionable.sort-desc > .v-menu > .v-menu-activator > .content > .v-icon > i').click();
-        await page.getByText('Sort Descending').click();
+        await page.locator(SORT_DESC_ICON_TRIGGER).click();
+        await page.getByText(TEXT.SORT_DESCENDING).click();
         await searchApprovalInbox(page, plNo);
         // Was clicking the first "Waiting for initiation" status cell
         // page-wide — not scoped to plNo, so it silently opened whichever
         // row happened to be first once more than one row shared that
         // status (observed: 6 matches). Scope to the row for our plNo.
-        await page.getByRole('row', { name: plNo }).getByRole('cell', { name: 'Waiting for initiation' }).click();
-        await page.getByRole('button', { name: 'Solution Cost' }).click();
+        await page.getByRole('row', { name: plNo }).getByRole('cell', { name: TEXT.WAITING_FOR_INITIATION }).click();
+        await page.getByRole('button', { name: SECTION_BUTTON_NAME.SOLUTION_COST }).click();
       }
     );
 
@@ -103,9 +112,9 @@ test.describe('Solution > P&L Solution Cost (Initiated / Waiting for approve)', 
         // point (initiate_flag, enabled; implement_cost_flag, disabled) —
         // same ambiguity as addSolutionCostCountryDetail above. `.first()`
         // is the enabled one (initiate_flag).
-        await page.getByRole('checkbox', { name: 'indeterminate_check_box' }).first().click();
-        await page.getByRole('button', { name: 'more_vert' }).click();
-        await page.getByText('Save and Stay').click();
+        await page.getByRole('checkbox', { name: CHECKBOX_NAME.INDETERMINATE }).first().click();
+        await page.getByRole('button', { name: BUTTON_NAME.MORE_ACTIONS }).click();
+        await page.getByText(TEXT.SAVE_AND_STAY).click();
         await page.waitForLoadState('networkidle');
         await page.waitForTimeout(1000);
         await expectNoValidationError(page);
@@ -118,10 +127,10 @@ test.describe('Solution > P&L Solution Cost (Initiated / Waiting for approve)', 
       '2. P&L — finalize checklist and Save and Stay (Initiated / Waiting for approve)',
       'The remaining checklist items are confirmed and the P&L saves again, moving it to Initiated / Waiting for approve.',
       async () => {
-        await page.getByRole('checkbox', { name: 'check_box_outline_blank' }).first().click();
-        await page.getByRole('checkbox', { name: 'check_box_outline_blank' }).click();
-        await page.getByRole('button', { name: 'more_vert' }).click();
-        await page.getByText('Save and Stay').click();
+        await page.getByRole('checkbox', { name: CHECKBOX_NAME.UNCHECKED_BLANK }).first().click();
+        await page.getByRole('checkbox', { name: CHECKBOX_NAME.UNCHECKED_BLANK }).click();
+        await page.getByRole('button', { name: BUTTON_NAME.MORE_ACTIONS }).click();
+        await page.getByText(TEXT.SAVE_AND_STAY).click();
         // Same "dispatches, doesn't wait" gap as salemarketing.spec.ts's
         // Save and Stay — settle before checking for a validation error.
         await page.waitForLoadState('networkidle');
@@ -149,80 +158,80 @@ test.describe('Solution > P&L Solution Cost (Initiated / Waiting for approve)', 
 // ---------------------------------------------------------------------------
 
 async function addSolutionCostEpItem(page: Page) {
-  await page.getByRole('checkbox', { name: 'indeterminate_check_box' }).nth(1).click();
-  await page.getByRole('button', { name: 'add', exact: true }).click();
+  await page.getByRole('checkbox', { name: CHECKBOX_NAME.INDETERMINATE }).nth(1).click();
+  await page.getByRole('button', { name: BUTTON_NAME.ADD, exact: true }).click();
   await page.getByRole('textbox').nth(4).click();
   await page.getByRole('textbox').nth(4).fill('EP automation 1');
-  await page.getByRole('button', { name: 'radio_button_unchecked USD' }).first().click();
+  await page.getByRole('button', { name: BUTTON_NAME.RADIO_UNCHECKED_USD }).first().click();
   await page.getByRole('spinbutton').first().click();
   await page.getByRole('spinbutton').first().fill('200');
   await page.getByRole('spinbutton').nth(1).click();
   await page.getByRole('spinbutton').first().fill('2001');
   await page.getByRole('spinbutton').nth(1).fill('2');
-  await page.locator('.field.half-right > .interface > .v-menu > .v-menu-activator > .v-input > .input').click();
-  await page.getByText('Month(s)').click();
+  await page.locator(SOLUTION_COST_FIELD.DURATION_TYPE_DROPDOWN_TRIGGER).click();
+  await page.getByText(TEXT.MONTH_S).click();
   await page.getByRole('spinbutton').nth(1).click();
   await page.getByRole('spinbutton').nth(1).fill('12');
-  await page.getByRole('button', { name: 'radio_button_unchecked USD' }).first().click();
+  await page.getByRole('button', { name: BUTTON_NAME.RADIO_UNCHECKED_USD }).first().click();
   await page.getByRole('spinbutton').nth(2).click();
   await page.getByRole('spinbutton').nth(2).fill('100');
   await page.getByRole('spinbutton').nth(3).click();
   await page.getByRole('spinbutton').nth(3).fill('1');
-  await page.getByRole('button', { name: 'radio_button_unchecked USD' }).click();
+  await page.getByRole('button', { name: BUTTON_NAME.RADIO_UNCHECKED_USD }).click();
   await page.getByRole('spinbutton').nth(4).click();
   await page.getByRole('spinbutton').nth(4).fill('200');
-  await page.locator('#dialog-outlet').getByRole('button', { name: 'check', exact: true }).click();
+  await page.locator(SELECTOR.DIALOG_OUTLET).getByRole('button', { name: BUTTON_NAME.SAVE, exact: true }).click();
 }
 
 async function addSolutionCostCostItem(page: Page) {
-  await page.getByRole('checkbox', { name: 'indeterminate_check_box' }).nth(1).click();
-  await page.getByRole('button', { name: 'add' }).nth(2).click();
+  await page.getByRole('checkbox', { name: CHECKBOX_NAME.INDETERMINATE }).nth(1).click();
+  await page.getByRole('button', { name: BUTTON_NAME.ADD }).nth(2).click();
   await page.getByRole('textbox').nth(4).click();
   await page.getByRole('textbox').nth(4).fill('Cost automation');
-  await page.getByRole('button', { name: 'radio_button_unchecked USD' }).first().click();
+  await page.getByRole('button', { name: BUTTON_NAME.RADIO_UNCHECKED_USD }).first().click();
   await page.getByRole('spinbutton').first().click();
   await page.getByRole('spinbutton').first().fill('200');
   await page.getByRole('spinbutton').nth(1).click();
   await page.getByRole('spinbutton').nth(1).fill('4');
-  await page.locator('.field.half-right > .interface > .v-menu > .v-menu-activator > .v-input > .input').click();
-  await page.locator('#menu-outlet div').filter({ hasText: /^Month\(s\)$/ }).click();
-  await page.getByRole('button', { name: 'radio_button_unchecked USD' }).first().click();
+  await page.locator(SOLUTION_COST_FIELD.DURATION_TYPE_DROPDOWN_TRIGGER).click();
+  await page.locator(SOLUTION_COST_FIELD.DURATION_TYPE_OPTION_IN_MENU).filter({ hasText: /^Month\(s\)$/ }).click();
+  await page.getByRole('button', { name: BUTTON_NAME.RADIO_UNCHECKED_USD }).first().click();
   await page.getByRole('spinbutton').nth(2).click();
   await page.getByRole('spinbutton').nth(2).fill('200');
   await page.getByRole('spinbutton').nth(3).click();
   await page.getByRole('spinbutton').nth(3).fill('2');
-  await page.getByRole('button', { name: 'radio_button_unchecked USD' }).click();
+  await page.getByRole('button', { name: BUTTON_NAME.RADIO_UNCHECKED_USD }).click();
   await page.getByRole('spinbutton').nth(4).click();
   await page.getByRole('spinbutton').nth(4).fill('1');
   await page.getByRole('spinbutton').nth(3).dblclick();
   await page.getByRole('spinbutton').nth(3).fill('1');
   await page.getByRole('spinbutton').nth(4).click();
   await page.getByRole('spinbutton').nth(4).fill('1000');
-  await page.locator('#dialog-outlet').getByRole('button', { name: 'check', exact: true }).click();
+  await page.locator(SELECTOR.DIALOG_OUTLET).getByRole('button', { name: BUTTON_NAME.SAVE, exact: true }).click();
 }
 
 async function addSolutionCostCountryDetail(page: Page) {
   // Two "indeterminate_check_box" toggles live in this tab panel
   // (off_net_cost_flag, implement_cost_flag) — the second is disabled, so
   // an unscoped click is ambiguous. Only the first (enabled) one is ours.
-  await page.locator('#tabpanel-solution_cost_tab').getByRole('checkbox', { name: 'indeterminate_check_box' }).first().click();
-  await page.getByRole('button', { name: 'add' }).nth(3).click();
+  await page.locator(SOLUTION_COST_FIELD.TAB_PANEL).getByRole('checkbox', { name: CHECKBOX_NAME.INDETERMINATE }).first().click();
+  await page.getByRole('button', { name: BUTTON_NAME.ADD }).nth(3).click();
 
-  await page.locator('.field.half.first-visible-field > .interface > .many-to-one > .v-input > .input').click();
+  await page.locator(SOLUTION_COST_FIELD.COUNTRY_PICKER_TRIGGER).click();
   await page.locator('div').filter({ hasText: /^Thailand$/ }).nth(1).click();
-  await page.getByRole('button', { name: 'check', exact: true }).nth(2).click();
+  await page.getByRole('button', { name: BUTTON_NAME.SAVE, exact: true }).nth(2).click();
 
-  await page.locator('.field.half-right > .interface > .many-to-one > .v-input > .input').click();
-  await page.locator('.v-table.table > table > tbody > .table-row > .spacer').click();
-  await page.getByRole('button', { name: 'check', exact: true }).nth(2).click();
+  await page.locator(SOLUTION_COST_FIELD.CODE_PICKER_TRIGGER).click();
+  await page.locator(SOLUTION_COST_FIELD.CODE_PICKER_FIRST_ROW).click();
+  await page.getByRole('button', { name: BUTTON_NAME.SAVE, exact: true }).nth(2).click();
 
   await page.getByRole('textbox').nth(4).click();
   await page.getByRole('textbox').nth(4).fill('12');
   await page.getByRole('textbox').nth(5).click();
   await page.getByRole('textbox').nth(5).fill('ID00AU1');
-  await page.locator('div:nth-child(5) > .interface > .v-input > .input > input').click();
-  await page.locator('div:nth-child(5) > .interface > .v-input > .input > input').fill('A');
-  await page.locator('div:nth-child(6) > .interface > .v-input > .input > input').click();
-  await page.locator('div:nth-child(6) > .interface > .v-input > .input > input').fill('B');
-  await page.locator('#dialog-outlet').getByRole('button', { name: 'check', exact: true }).click();
+  await page.locator(SOLUTION_COST_FIELD.BREAKDOWN_A_INPUT).click();
+  await page.locator(SOLUTION_COST_FIELD.BREAKDOWN_A_INPUT).fill('A');
+  await page.locator(SOLUTION_COST_FIELD.BREAKDOWN_B_INPUT).click();
+  await page.locator(SOLUTION_COST_FIELD.BREAKDOWN_B_INPUT).fill('B');
+  await page.locator(SELECTOR.DIALOG_OUTLET).getByRole('button', { name: BUTTON_NAME.SAVE, exact: true }).click();
 }
